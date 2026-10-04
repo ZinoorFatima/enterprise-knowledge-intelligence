@@ -1,0 +1,95 @@
+# Enterprise Knowledge Intelligence System
+#
+# Five services. Host port 5433 for Postgres so this cannot collide with a
+# pre-existing local PostgreSQL service on 5432.
+name: ekis
+
+services:
+  db:
+    # pgvector >= 0.8 is required: halfvec + hnsw.iterative_scan.
+    image: pgvector/pgvector:pg17
+    container_name: ekis-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ekis}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ekis_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-ekis}
+    ports:
+      - "${POSTGRES_HOST_PORT:-5433}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ekis} -d ${POSTGRES_DB:-ekis}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  embed:
+    # Owns bge-m3 (~2.2GB) and bge-reranker-v2-m3 (~2.2GB). Loaded ONCE here so
+    # torch never enters the api/worker images and api restarts stay sub-second.
+    build:
+      context: .
+      dockerfile: services/embed/Dockerfile
+    container_name: ekis-embed
+    restart: unless-stopped
+    environment:
+      EMBED_MODEL: ${EMBED_MODEL:-BAAI/bge-m3}
+      RERANK_MODEL: ${RERANK_MODEL:-BAAI/bge-reranker-v2-m3}
+      HF_HOME: /models
+    ports:
+      - "${EMBED_HOST_PORT:-8001}:8001"
+    volumes:
+      - hfcache:/models
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8001/healthz')"]
+      interval: 15s
+      timeout: 10s
+      retries: 30
+      start_period: 300s
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: ekis-api
+    restart: unless-stopped
+    env_file: [.env]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-ekis}:${POSTGRES_PASSWORD:-ekis_dev_password}@db:5432/${POSTGRES_DB:-ekis}
+      EMBED_SERVICE_URL: http://embed:8001
+      STORAGE_DIR: /storage
+    ports:
+      - "${API_HOST_PORT:-8000}:8000"
+    volumes:
+      - ./api:/app
+      - ./eval:/eval
+      - blobs:/storage
+    depends_on:
+      db: {condition: service_healthy}
+      embed: {condition: service_started}
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  worker:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: ekis-worker
+    restart: unless-stopped
+    env_file: [.env]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-ekis}:${POSTGRES_PASSWORD:-ekis_dev_password}@db:5432/${POSTGRES_DB:-ekis}
+      EMBED_SERVICE_URL: http://embed:8001
+      STORAGE_DIR: /storage
+    volumes:
+      - ./api:/app
+      - blobs:/storage
+    depends_on:
+      db: {condition: service_healthy}
+      embed: {condition: service_started}
+    command: python -m app.worker
+
+volumes:
+  pgdata:
+  hfcache:
+  blobs:

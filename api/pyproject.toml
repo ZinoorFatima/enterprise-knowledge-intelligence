@@ -1,0 +1,38 @@
+[project]
+name = "ekis-api"
+version = "0.1.0"
+description = "Enterprise Knowledge Intelligence System — RAG API"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.32",
+  "pydantic>=2.9",
+  "pydantic-settings>=2.6",
+  "asyncpg>=0.30",
+  "sqlalchemy[asyncio]>=2.0.36",
+  "alembic>=1.14",
+  "python-multipart>=0.0.17",
+  "httpx>=0.28",
+  "pyjwt>=2.10",
+  "structlog>=24.4",
+  "pymupdf>=1.24",
+  "pysbd>=0.3.4",
+  "numpy>=1.26",
+  "anthropic>=0.40",
+  "langgraph>=1.2",
+  "langchain-core>=1.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3", "pytest-asyncio>=0.24", "ruff>=0.8"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

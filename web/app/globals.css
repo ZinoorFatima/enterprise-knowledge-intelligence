@@ -1,0 +1,244 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Design tokens.
+
+   Neutrals carry a 275 degree (blue-violet) hue at chroma <= 0.012: enough to
+   read as engineered, not enough to read as tinted. Primary sits at L 0.52 so
+   it passes 4.5:1 as text on white AND works as a border on --primary-subtle;
+   a lighter brand blue would have forced a second "text blue" token.
+
+   Retrieval lanes get exactly two hues, amber and violet. That pair stays
+   separable under deuteranopia, protanopia and tritanopia simultaneously; a
+   teal/green pairing does not. Fused and reranked are deliberately neutral.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Neutrals */
+  --background:        oklch(1 0 0);
+  --surface:           oklch(0.985 0.002 275);
+  --surface-sunken:    oklch(0.968 0.004 275);
+  --surface-raised:    oklch(1 0 0);
+  --overlay:           oklch(1 0 0);
+
+  --foreground:        oklch(0.205 0.012 275);  /* 15.9:1 */
+  --foreground-strong: oklch(0.145 0.014 275);
+  --muted-foreground:  oklch(0.505 0.012 275);  /* 5.2:1  */
+  --subtle-foreground: oklch(0.625 0.011 275);  /* 3.4:1 - decorative only */
+
+  --border:            oklch(0.922 0.004 275);
+  --border-strong:     oklch(0.865 0.006 275);
+  --ring:              oklch(0.52 0.17 262);
+
+  /* Brand */
+  --primary:            oklch(0.52 0.17 262);   /* 6.3:1 on white */
+  --primary-hover:      oklch(0.475 0.175 262);
+  --primary-foreground: oklch(0.99 0 0);
+  --primary-subtle:     oklch(0.965 0.018 262);
+  --primary-border:     oklch(0.885 0.055 262);
+
+  /* Semantic */
+  --success: oklch(0.545 0.135 152);
+  --warning: oklch(0.635 0.145 68);
+  --danger:  oklch(0.545 0.195 25);
+  --info:    oklch(0.545 0.115 235);
+  --success-subtle: oklch(0.965 0.028 152);
+  --warning-subtle: oklch(0.968 0.038 68);
+  --danger-subtle:  oklch(0.965 0.028 25);
+
+  /* Retrieval lanes */
+  --lane-lexical:       oklch(0.635 0.145 68);   /* BM25   */
+  --lane-lexical-fill:  oklch(0.955 0.045 68);
+  --lane-semantic:      oklch(0.545 0.165 295);  /* vector */
+  --lane-semantic-fill: oklch(0.955 0.035 295);
+  --lane-fused:         var(--foreground);
+  --rerank-up:          var(--success);
+  --rerank-down:        var(--danger);
+
+  /* Verification + citation highlight */
+  --claim-supported:   var(--success);
+  --claim-partial:     var(--warning);
+  --claim-unsupported: var(--danger);
+  --highlight-citation: oklch(0.90 0.09 92 / 0.55);
+
+  /* Radius: app controls 6px, marketing cards 12px. Never fully round except
+     avatars and the citation chip. */
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+
+  /* Elevation. Borders first; shadows ONLY for things that actually float.
+     A static card in the app gets a border and --surface-raised, never a
+     shadow. This is the single biggest "Linear vs template" lever. */
+  --shadow-xs: 0 1px 2px oklch(0.145 0.014 275 / 0.05);
+  --shadow-sm: 0 1px 2px oklch(0.145 0.014 275 / 0.06), 0 1px 1px oklch(0.145 0.014 275 / 0.04);
+  --shadow-md: 0 4px 12px oklch(0.145 0.014 275 / 0.08), 0 1px 3px oklch(0.145 0.014 275 / 0.05);
+  --shadow-lg: 0 12px 32px oklch(0.145 0.014 275 / 0.12), 0 2px 8px oklch(0.145 0.014 275 / 0.06);
+}
+
+.dark {
+  --background:        oklch(0.163 0.008 275);
+  --surface:           oklch(0.196 0.009 275);
+  --surface-sunken:    oklch(0.145 0.008 275);
+  --surface-raised:    oklch(0.223 0.010 275);
+  --overlay:           oklch(0.235 0.010 275);
+
+  --foreground:        oklch(0.945 0.004 275);  /* 15.8:1 */
+  --foreground-strong: oklch(0.985 0.002 275);
+  --muted-foreground:  oklch(0.700 0.010 275);  /* 6.6:1  */
+  --subtle-foreground: oklch(0.585 0.011 275);
+
+  --border:        oklch(0.272 0.010 275);
+  --border-strong: oklch(0.345 0.012 275);
+  --ring:          oklch(0.665 0.155 262);
+
+  --primary:            oklch(0.665 0.155 262);  /* 7.2:1 on --background */
+  --primary-hover:      oklch(0.715 0.150 262);
+  --primary-foreground: oklch(0.16 0.01 262);
+  --primary-subtle:     oklch(0.265 0.055 262);
+  --primary-border:     oklch(0.355 0.085 262);
+
+  --success: oklch(0.700 0.145 152);
+  --warning: oklch(0.775 0.135 72);
+  --danger:  oklch(0.675 0.175 25);
+  --info:    oklch(0.700 0.105 235);
+  --success-subtle: oklch(0.255 0.045 152);
+  --warning-subtle: oklch(0.265 0.048 72);
+  --danger-subtle:  oklch(0.255 0.055 25);
+
+  --lane-lexical:       oklch(0.775 0.135 72);
+  --lane-lexical-fill:  oklch(0.265 0.048 72);
+  --lane-semantic:      oklch(0.720 0.145 295);
+  --lane-semantic-fill: oklch(0.265 0.050 295);
+
+  --highlight-citation: oklch(0.72 0.12 92 / 0.38);
+
+  /* Shadows are nearly useless on dark; elevation comes from --surface-raised
+     plus a border. Kept only so floating layers still separate. */
+  --shadow-xs: 0 1px 2px oklch(0 0 0 / 0.4);
+  --shadow-sm: 0 1px 2px oklch(0 0 0 / 0.5);
+  --shadow-md: 0 4px 12px oklch(0 0 0 / 0.55);
+  --shadow-lg: 0 12px 32px oklch(0 0 0 / 0.65);
+}
+
+@theme inline {
+  --color-background:        var(--background);
+  --color-surface:           var(--surface);
+  --color-surface-sunken:    var(--surface-sunken);
+  --color-surface-raised:    var(--surface-raised);
+  --color-overlay:           var(--overlay);
+  --color-foreground:        var(--foreground);
+  --color-foreground-strong: var(--foreground-strong);
+  --color-muted-foreground:  var(--muted-foreground);
+  --color-subtle-foreground: var(--subtle-foreground);
+  --color-border:            var(--border);
+  --color-border-strong:     var(--border-strong);
+  --color-ring:              var(--ring);
+
+  --color-primary:            var(--primary);
+  --color-primary-hover:      var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-subtle:     var(--primary-subtle);
+  --color-primary-border:     var(--primary-border);
+
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger:  var(--danger);
+  --color-info:    var(--info);
+  --color-success-subtle: var(--success-subtle);
+  --color-warning-subtle: var(--warning-subtle);
+  --color-danger-subtle:  var(--danger-subtle);
+
+  --color-lane-lexical:       var(--lane-lexical);
+  --color-lane-lexical-fill:  var(--lane-lexical-fill);
+  --color-lane-semantic:      var(--lane-semantic);
+  --color-lane-semantic-fill: var(--lane-semantic-fill);
+  --color-rerank-up:   var(--rerank-up);
+  --color-rerank-down: var(--rerank-down);
+
+  --color-claim-supported:   var(--claim-supported);
+  --color-claim-partial:     var(--claim-partial);
+  --color-claim-unsupported: var(--claim-unsupported);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, "SF Mono", Menlo, monospace;
+
+  --radius-xs:  var(--radius-xs);
+  --radius-sm:  var(--radius-sm);
+  --radius-md:  var(--radius-md);
+  --radius-lg:  var(--radius-lg);
+  --radius-xl:  var(--radius-xl);
+  --radius-2xl: var(--radius-2xl);
+
+  --shadow-xs: var(--shadow-xs);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+}
+
+/* ── Type scale ─────────────────────────────────────────────────────────────
+   Inter for prose. JetBrains Mono, tabular, for every number that gets
+   compared to another number - scores, ranks, latencies, page numbers. That
+   single rule is what makes the retrieval inspector legible.
+   ─────────────────────────────────────────────────────────────────────────── */
+@utility text-display-1 { font-size: 60px; line-height: 62px; letter-spacing: -0.032em; font-weight: 600; }
+@utility text-display-2 { font-size: 44px; line-height: 48px; letter-spacing: -0.028em; font-weight: 600; }
+@utility text-display-3 { font-size: 32px; line-height: 38px; letter-spacing: -0.022em; font-weight: 600; }
+@utility text-title-lg  { font-size: 24px; line-height: 30px; letter-spacing: -0.016em; font-weight: 600; }
+@utility text-title     { font-size: 18px; line-height: 26px; letter-spacing: -0.011em; font-weight: 600; }
+@utility text-title-sm  { font-size: 15px; line-height: 22px; letter-spacing: -0.006em; font-weight: 600; }
+@utility text-body-lg   { font-size: 17px; line-height: 28px; letter-spacing: -0.003em; }
+@utility text-body      { font-size: 15px; line-height: 24px; }
+@utility text-ui        { font-size: 14px; line-height: 20px; }
+@utility text-ui-sm     { font-size: 13px; line-height: 18px; letter-spacing: 0.002em; }
+@utility text-caption   { font-size: 12px; line-height: 16px; letter-spacing: 0.006em; font-weight: 500; }
+@utility text-overline {
+  font-size: 11px; line-height: 14px; letter-spacing: 0.08em;
+  font-weight: 600; text-transform: uppercase;
+}
+
+/* Tabular numerals. Apply to every compared number. */
+@utility tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* ── Globals ──────────────────────────────────────────────────────────────── */
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  html {
+    color-scheme: light dark;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  /* Numbers in tables and inspectors are always tabular mono. */
+  code, kbd, samp, pre {
+    font-family: var(--font-mono);
+  }
+}
+
+/* Nothing animates longer than 300ms. No spring physics, no parallax. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
