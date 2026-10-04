@@ -36,6 +36,8 @@ export function PdfViewer({ documentId, page, citedText, title }: Props) {
   // one to unwind before touching the same canvas.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const renderRef = useRef<any>(null);
+  // Bumped when the page becomes visible, to re-run a hidden-page render.
+  const [visibleTick, setVisibleTick] = useState(0);
   const [tier, setTier] = useState<Tier>("pending");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -62,6 +64,14 @@ export function PdfViewer({ documentId, page, citedText, title }: Props) {
         const task = pdfjs.getDocument({
           url: `/api/documents/${documentId}/file`,
           withCredentials: true,
+          // Required for PDFs that reference the standard-14 fonts (Helvetica,
+          // Times, Courier) without embedding them -- which most generators
+          // produce. Without this pdf.js cannot resolve the font and render()
+          // never settles: it hangs rather than rejecting, so the symptom is a
+          // permanent spinner with a silent console.
+          standardFontDataUrl: "/standard_fonts/",
+          cMapUrl: "/cmaps/",
+          cMapPacked: true,
         });
         // Deliberately NOT calling task.destroy() here.
         //
@@ -122,7 +132,39 @@ export function PdfViewer({ documentId, page, citedText, title }: Props) {
         }
         if (cancelled) return;
 
-        const render = pdfPage.render({ canvasContext: ctx, viewport, canvas });
+        // pdf.js continues a display-intent render across requestAnimationFrame
+        // callbacks. A hidden page does not animate, so rAF never fires and the
+        // render stalls forever -- no error, no rejection, just a permanent
+        // spinner. That is correct browser behaviour, not a pdf.js bug, and it
+        // hits background tabs and embedded panes alike.
+        //
+        // So: give a hidden page a brief chance to become visible, and if it
+        // stays hidden, render with print intent, which schedules continuation
+        // without rAF. Verified in a hidden page: display intent paints 0
+        // pixels and hangs; print intent paints the page.
+        if (document.hidden) {
+          await Promise.race([
+            new Promise<void>((resolve) => {
+              const onVisible = () => {
+                if (!document.hidden) {
+                  document.removeEventListener("visibilitychange", onVisible);
+                  resolve();
+                }
+              };
+              document.addEventListener("visibilitychange", onVisible);
+            }),
+            new Promise<void>((resolve) => setTimeout(resolve, 1500)),
+          ]);
+          if (cancelled) return;
+        }
+        const intent = document.hidden ? "print" : "display";
+
+        const render = pdfPage.render({
+          canvasContext: ctx,
+          viewport,
+          canvas,
+          intent,
+        });
         renderRef.current = render;
         cleanup = () => {
           render.cancel?.();
@@ -132,7 +174,7 @@ export function PdfViewer({ documentId, page, citedText, title }: Props) {
             render.promise,
             new Promise<never>((_, reject) =>
               setTimeout(
-                () => reject(new Error("The PDF renderer did not finish on this browser")),
+                () => reject(new Error("Timed out rendering this page")),
                 20_000,
               ),
             ),
@@ -185,7 +227,17 @@ export function PdfViewer({ documentId, page, citedText, title }: Props) {
       cancelled = true;
       cleanup?.();
     };
-  }, [documentId, page, citedText]);
+  }, [documentId, page, citedText, visibleTick]);
+
+  // A page rendered while hidden used the print-intent fallback. Once the tab
+  // becomes visible, re-run so it is rendered the normal way.
+  useEffect(() => {
+    const onVisible = () => {
+      if (!document.hidden) setVisibleTick((t) => t + 1);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
 
   return (
     <div>

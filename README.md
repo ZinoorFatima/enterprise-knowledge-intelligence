@@ -201,6 +201,7 @@ Each has a regression test:
 3. **nDCG exceeded 1.0** (reported `1.105`). Several chunks covering one labelled page were each credited, so DCG outran IDCG. Pages are now credited once.
 4. **Unanswerable questions were being answered** (refusal accuracy `0.000`). The lexical reranker scored `0.25 + 0.75 × overlap`, so a passage with *zero* query-term overlap scored exactly `0.25` — precisely `rerank_score_floor`, which is compared with `>=`. Every irrelevant passage survived, and the model received a full context for questions the corpus could not answer. Zero overlap now scores `0.0`, query stopwords no longer dilute the denominator, and a single incidental term match is discounted as non-evidence. Refusal accuracy went `0.000 → 1.000` with no over-refusal.
 5. **`run_eval.py` measured the wrong system.** The script wired fake in-memory retriever and reranker stand-ins, so it reported zeros against a golden set labelled with real document ids. It now uses `PgRetriever` and the configured components, like the API.
+6. **The PDF viewer hung forever in background tabs.** pdf.js continues a display-intent render across `requestAnimationFrame` callbacks, and a hidden page does not animate — so rAF never fires and the render stalls with no error, no rejection and a silent console. Correct browser behaviour, not a pdf.js bug, but it affects any background tab or embedded pane. The viewer now waits briefly for visibility, falls back to print intent (which schedules without rAF) if the page stays hidden, and re-renders normally once it becomes visible. Verified in a hidden page: display intent paints 0 pixels, print intent paints the page. The missing `standardFontDataUrl`/`cMapUrl` configuration was fixed in the same pass — PDFs referencing the non-embedded standard-14 fonts need it.
 
 ---
 
@@ -313,7 +314,6 @@ Stated plainly, because a system with no listed limitations has not been evaluat
 - **`bge-m3` runs at ~0.1 chunks/sec on CPU.** Re-embedding a few hundred chunks takes hours. Only a small subset of the dev corpus carries real embeddings; the rest are excluded from the vector lane rather than mixed across incompatible embedding spaces.
 - **Postgres full-text is cover density, not BM25.** No IDF, no term saturation, no tunable length normalisation — and `websearch_to_tsquery` uses AND semantics, so one absent word kills the match. The lane sits behind a protocol so ParadeDB `pg_search` can replace it once measurement shows it is the binding constraint.
 - **The cross-encoder reranker is impractical on CPU**, so the default is a lexical reranker. It cannot score paraphrase. Set `RERANK_BACKEND=cross-encoder` on a GPU host.
-- **The PDF viewer's data path is verified** (range requests, citation resolution) **but pdf.js does not complete a render in the embedded test browser.** Needs confirming in a standard browser. It fails gracefully with an escape-hatch link rather than hanging.
 - **Published evaluation figures on the marketing site are targets**, labelled as such, until a run against a reviewed dataset is frozen.
 
 ---
