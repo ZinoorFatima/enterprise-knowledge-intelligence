@@ -6,6 +6,12 @@ Most RAG systems are a black box — a question goes in, a confident paragraph c
 
 ---
 
+![Ask workspace with a cited answer and the source page highlighted](docs/screenshots/ask-citations.png)
+
+> A question sharing no distinctive wording with its answer. The system retrieves the governing-law clause, cites it, opens the source page, and highlights the span — labelling it **Approximate** rather than implying a precision it did not achieve.
+
+---
+
 ## What it does
 
 Upload PDFs. Ask questions across the whole corpus. Get an answer where:
@@ -27,6 +33,43 @@ Upload PDFs. Ask questions across the whole corpus. Get an answer where:
 | **Source viewer** | Click a citation to open its page with the cited span highlighted, via three-tier targeting that degrades honestly |
 | **Validation** | Per-claim entailment verification, independent verifier model enforced in code |
 | **Evaluation** | Context Precision / Recall, Faithfulness, Answer Relevancy, nDCG, MRR, refusal accuracy, bootstrap CIs |
+
+---
+
+## Screenshots
+
+Regenerate any time with `npm --prefix web run screenshots` against a running stack — they are scripted rather than hand-captured so they cannot quietly go stale after a UI change.
+
+### Retrieval inspector
+
+![Retrieval inspector showing both lanes, fusion scores and rerank movement](docs/screenshots/retrieval-inspector.png)
+
+Both lanes side by side. `L` is keyword, `S` is vector, and a dash means that lane never retrieved the chunk — the most informative cell in the table, so it gets its own treatment rather than rendering as a zero. The `Δ` column is how far the reranker moved each result. The footer states plainly that BM25 and cosine scores are not comparable and are never mixed.
+
+### Verification
+
+![Verification panel showing per-claim support](docs/screenshots/verification.png)
+
+Claims are checked individually against the retrieved evidence, unsupported ones sort to the top, and an answer that was not checked says so instead of showing a score.
+
+### Quality dashboard
+
+![Evaluation dashboard with provisional banner and per-item results](docs/screenshots/quality-dashboard.png)
+
+Runs the golden set through the production pipeline. Note the provisional banner and its reasons, metrics that read **not measured** rather than a number, and `—` for values that are genuinely undefined rather than zero.
+
+### Marketing site
+
+| | |
+|---|---|
+| ![Landing page](docs/screenshots/landing.png) | ![Evaluation methodology page](docs/screenshots/evaluation.png) |
+| Landing | Evaluation — dataset first, then metrics with confidence intervals, judge agreement including the weakest figure, an ablation table, and the cases where it fails |
+
+![How it works, with the interactive pipeline diagram](docs/screenshots/how-it-works.png)
+
+The pipeline diagram is inline SVG rather than an image: its stage labels are real text, it follows the theme, and hovering a stage explains what happens there. The retrieval node is the one place lane colour appears — two bars visibly merging into one.
+
+![Document library with upload](docs/screenshots/library.png)
 
 ---
 
@@ -284,6 +327,14 @@ Then sign up at `http://localhost:3000/sign-up` and upload a PDF.
 ```bash
 python api/scripts/run_eval.py eval/golden/smoke.jsonl
 ```
+
+### 6. Regenerate the screenshots (optional)
+
+```bash
+npm --prefix web run screenshots
+```
+
+Drives a real browser against the running stack and rewrites `docs/screenshots/`.
 
 ---
 
