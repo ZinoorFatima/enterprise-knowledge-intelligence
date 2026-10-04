@@ -40,7 +40,20 @@ class Settings(BaseSettings):
     # This is a first-class mode, not a test fixture — the whole UI must be
     # exercisable without an API key.
     llm_mode: Literal["offline", "live"] = "offline"
+
+    # Which generation backend to use. "offline" needs no key at all.
+    # llm_mode is kept for backwards compatibility: LLM_MODE=live without an
+    # explicit LLM_PROVIDER resolves to anthropic.
+    llm_provider: Literal["offline", "anthropic", "gemini"] = "offline"
+
     anthropic_api_key: str = ""
+    gemini_api_key: str = ""
+    # Pinned, deliberately not a "-latest" alias: an eval whose model can change
+    # underneath it is not reproducible, and the config snapshot would record an
+    # alias rather than what actually ran.
+    gemini_model: str = "gemini-3.8-flash"
+    # Must differ from gemini_model; a model may not grade its own output.
+    gemini_judge_model: str = "gemini-3.5-flash"
 
     model_answer: str = "claude-opus-5"
     model_rewrite: str = "claude-haiku-4-5"
@@ -146,8 +159,19 @@ class Settings(BaseSettings):
         return self.database_url.replace("postgresql+asyncpg://", "postgresql://")
 
     @property
+    def provider(self) -> str:
+        """Resolved generation backend.
+
+        An explicit LLM_PROVIDER wins. Otherwise LLM_MODE=live means anthropic,
+        so existing configs keep working.
+        """
+        if self.llm_provider != "offline":
+            return self.llm_provider
+        return "anthropic" if self.llm_mode == "live" else "offline"
+
+    @property
     def is_offline(self) -> bool:
-        return self.llm_mode == "offline"
+        return self.provider == "offline"
 
     def snapshot(self) -> dict:
         """Config snapshot stored on every eval run, so a number is always
@@ -158,7 +182,7 @@ class Settings(BaseSettings):
             "w_bm25", "w_vec", "rerank_top_n", "rerank_score_floor",
             "rerank_relative_floor", "rerank_backend", "hnsw_ef_search", "max_context_tokens",
             "chunk_target_tokens", "chunk_min_tokens", "chunk_max_tokens",
-            "chunk_breakpoint_percentile", "ocr_engine", "llm_mode",
+            "chunk_breakpoint_percentile", "ocr_engine", "llm_mode", "gemini_model", "gemini_judge_model",
         )
         return {k: getattr(self, k) for k in keys}
 

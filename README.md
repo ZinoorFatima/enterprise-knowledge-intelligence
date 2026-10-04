@@ -222,6 +222,35 @@ Per item — the two unanswerable questions are correctly refused, and no answer
 - **`provisional: true`** is attached automatically, with reasons, whenever a run uses unreviewed data or stubbed generation.
 - **`--` is not zero.** Context Precision is undefined on a correctly-refused item; reporting 0 there would punish the behaviour the score floors exist to produce.
 
+### Provider comparison
+
+The same pipeline can run against different generation backends, and the harness
+compares them on identical retrieval with a paired bootstrap CI.
+Full write-up: **[docs/provider-comparison.md](docs/provider-comparison.md)**.
+
+| Metric | offline (extractive) | gemini-3.8-flash | delta | 95% CI |
+|---|---|---|---|---|
+| Context Precision *(control)* | 0.972 | 0.972 | +0.000 | [+0.000, +0.000] |
+| Context Recall *(control)* | 1.000 | 1.000 | +0.000 | [+0.000, +0.000] |
+| **Answer Relevancy** | 0.467 | **0.733** | **+0.266** | **[+0.203, +0.317]** |
+| Faithfulness | not measured | 1.000 *(n=3)* | — | not pairable |
+| Refusal accuracy | 1.000 | 1.000 | — | — |
+
+The retrieval rows are a **control**: they moved by exactly 0.000, confirming
+only the generator differed. Answer Relevancy is the one real finding, and it is
+measuring what it should — the extractive baseline returns retrieved text
+verbatim, so it scores poorly on *addressing the question asked* even when the
+right passage was retrieved.
+
+Faithfulness is **not** a comparison: the baseline cannot judge entailment, so
+there is nothing to pair against, and Gemini's 1.000 came from 3 items judged by
+a model of its own family. Six answerable items over 5 chunks is far too small
+for any general claim about either provider.
+
+```bash
+cd api && python scripts/compare_providers.py --a offline --b gemini
+```
+
 ### Honesty properties, enforced in code
 
 These are not conventions — they fail the build or raise at runtime:
@@ -246,7 +275,10 @@ Each has a regression test:
 3. **nDCG exceeded 1.0** (reported `1.105`). Several chunks covering one labelled page were each credited, so DCG outran IDCG. Pages are now credited once.
 4. **Unanswerable questions were being answered** (refusal accuracy `0.000`). The lexical reranker scored `0.25 + 0.75 × overlap`, so a passage with *zero* query-term overlap scored exactly `0.25` — precisely `rerank_score_floor`, which is compared with `>=`. Every irrelevant passage survived, and the model received a full context for questions the corpus could not answer. Zero overlap now scores `0.0`, query stopwords no longer dilute the denominator, and a single incidental term match is discounted as non-evidence. Refusal accuracy went `0.000 → 1.000` with no over-refusal.
 5. **`run_eval.py` measured the wrong system.** The script wired fake in-memory retriever and reranker stand-ins, so it reported zeros against a golden set labelled with real document ids. It now uses `PgRetriever` and the configured components, like the API.
-6. **The PDF viewer hung forever in background tabs.** pdf.js continues a display-intent render across `requestAnimationFrame` callbacks, and a hidden page does not animate — so rAF never fires and the render stalls with no error, no rejection and a silent console. Correct browser behaviour, not a pdf.js bug, but it affects any background tab or embedded pane. The viewer now waits briefly for visibility, falls back to print intent (which schedules without rAF) if the page stays hidden, and re-renders normally once it becomes visible. Verified in a hidden page: display intent paints 0 pixels, print intent paints the page. The missing `standardFontDataUrl`/`cMapUrl` configuration was fixed in the same pass — PDFs referencing the non-embedded standard-14 fonts need it.
+6. **The verifier independence guard was nominal.** It compared config strings while the Gemini provider ignored the requested model entirely, so Gemini would have graded its own output with the check still reporting a pass. Providers now declare their own judge model and the guard checks what will actually run.
+7. **Verification never ran during eval.** The 20% cost-saving sampling gate still applied despite a comment claiming otherwise, making faithfulness a measurement of a random subset. `force_verify` bypasses it for eval runs.
+8. **Rate-limited items looked like valid empty answers.** A 429 produced an empty answer with no error recorded, so a quota failure was indistinguishable from a model with nothing to say. Generation failures are now recorded as item errors and flagged in the report header.
+9. **The PDF viewer hung forever in background tabs.** pdf.js continues a display-intent render across `requestAnimationFrame` callbacks, and a hidden page does not animate — so rAF never fires and the render stalls with no error, no rejection and a silent console. Correct browser behaviour, not a pdf.js bug, but it affects any background tab or embedded pane. The viewer now waits briefly for visibility, falls back to print intent (which schedules without rAF) if the page stays hidden, and re-renders normally once it becomes visible. Verified in a hidden page: display intent paints 0 pixels, print intent paints the page. The missing `standardFontDataUrl`/`cMapUrl` configuration was fixed in the same pass — PDFs referencing the non-embedded standard-14 fonts need it.
 
 ---
 

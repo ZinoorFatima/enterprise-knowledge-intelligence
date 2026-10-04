@@ -177,6 +177,7 @@ class PipelineState(TypedDict, total=False):
     history: list[dict[str, Any]]
     want_rewrite: bool
     want_verify: bool
+    force_verify: bool
     top_k: int
 
     # Stage 1 - query understanding

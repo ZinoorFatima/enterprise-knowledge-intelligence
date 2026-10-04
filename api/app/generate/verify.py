@@ -212,8 +212,14 @@ async def verify_answer(
     If faithfulness were computed by two implementations, one of them would be
     lying -- so there is exactly one.
     """
-    verifier_model = settings.model_verify
-    assert_independent_verifier(generator_model or settings.model_answer, verifier_model)
+    # Ask the provider which model it will actually judge with, rather than
+    # trusting a config string. An earlier version compared settings.model_answer
+    # against settings.model_verify while the Gemini provider ignored the
+    # requested model entirely -- so Gemini would have graded its own output
+    # with the independence check still reporting a pass.
+    verifier_model = getattr(provider, "judge_model", settings.model_verify)
+    generator = generator_model or getattr(provider, "model", settings.model_answer)
+    assert_independent_verifier(generator, verifier_model)
 
     uncited = find_uncited_spans(blocks or [])
 
@@ -226,7 +232,10 @@ async def verify_answer(
 
     # ── Stage B: decompose ────────────────────────────────────────────────
     decomp, _ = await provider.complete_json(
-        model=settings.model_decompose,
+        # The active provider's judge model. Passing a Claude model name to a
+        # Gemini client 404s, which previously surfaced only as faithfulness
+        # silently reading 'not measured'.
+        model=verifier_model,
         system=DECOMPOSE_SYSTEM,
         user=answer_text,
         schema=CLAIMS_SCHEMA,

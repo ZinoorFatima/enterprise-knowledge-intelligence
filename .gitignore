@@ -36,3 +36,5 @@ vec.txt
 ask_result.json
 eval_last_run.json
 api/eval_last_run.json
+provider_comparison.json
+api/provider_comparison.json

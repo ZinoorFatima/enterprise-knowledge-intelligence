@@ -78,7 +78,12 @@ class ItemResult:
     reciprocal_rank: float | None = None
     recall_at_20: float | None = None
     latency_ms: float = 0.0
+    cost_usd: float = 0.0
     error: str | None = None
+
+
+def provider_name_of(deps) -> str:
+    return getattr(deps.provider, "name", "unknown")
 
 
 @dataclass
@@ -105,6 +110,10 @@ class RunSummary:
     p95_latency_ms: float
     config: dict
     results: list[ItemResult] = field(default_factory=list)
+
+    def metrics_by_name(self, name: str) -> MetricSummary | None:
+        """This run's own aggregate for a metric, independent of any comparison."""
+        return getattr(self, name, None)
 
     def to_dict(self) -> dict:
         def ms(m: MetricSummary) -> dict:
@@ -164,6 +173,10 @@ async def run_eval(
     """Run a dataset through the production graph and score it."""
     results: list[ItemResult] = []
     latencies: list[float] = []
+    # Price usage against the model that actually generated, not a config default.
+    # Offline generation costs nothing; pricing its synthetic token counts against
+    # a real model would invent spend that never happened.
+    generation_model = getattr(deps.provider, "model", "") if provider_name_of(deps) != "offline" else ""
 
     for item in items:
         t0 = time.perf_counter()
@@ -173,9 +186,10 @@ async def run_eval(
                 deps=deps,
                 filters=item.filters,
                 want_rewrite=want_rewrite,
-                # Verification is forced on in eval: sampling would make
-                # faithfulness a measurement of a random subset.
+                # Verification is forced on in eval: the sampling gate would
+                # make faithfulness a measurement of a random subset.
                 want_verify=True,
+                force_verify=True,
             )
         except Exception as exc:
             results.append(
@@ -188,6 +202,15 @@ async def run_eval(
 
         elapsed = (time.perf_counter() - t0) * 1000
         latencies.append(elapsed)
+
+        # A generation failure (rate limit, timeout, provider outage) must be
+        # recorded as an ERROR, not left to look like a legitimate empty answer.
+        # Otherwise a quota exhaustion is indistinguishable from a model that
+        # simply had nothing to say, and every metric silently reports None
+        # while the run still looks healthy.
+        item_error = "; ".join(out.errors)[:300] if out.errors else None
+        if not item_error and not out.answer_text.strip() and not out.refused:
+            item_error = "generation returned an empty answer"
 
         retrieved = [
             RetrievedChunk(
@@ -225,6 +248,8 @@ async def run_eval(
                 reciprocal_rank=reciprocal_rank(retrieved, item.relevant_pages),
                 recall_at_20=recall_at_k(fused_chunks, item.relevant_pages, 20),
                 latency_ms=elapsed,
+                cost_usd=out.usage.cost_usd(generation_model),
+                error=item_error,
             )
         )
 
@@ -241,10 +266,19 @@ async def run_eval(
     answering = [r for r in results if r.expected_behavior == "answer"]
 
     reasons: list[str] = []
-    if settings.is_offline:
+    provider_name = getattr(deps.provider, "name", "unknown")
+    if provider_name == "offline":
         reasons.append(
-            "LLM_MODE=offline: generation is extractive and entailment is not judged, "
-            "so faithfulness and answer relevancy are not measured"
+            "provider=offline: generation is extractive and entailment is not judged, "
+            "so faithfulness is not measured"
+        )
+    judge = getattr(deps.provider, "judge_model", "")
+    gen = getattr(deps.provider, "model", "")
+    if judge and gen and judge.split("-")[0] == gen.split("-")[0]:
+        # Same-vendor judging reduces self-preference bias but does not remove it.
+        reasons.append(
+            f"judge ({judge}) and generator ({gen}) are from the same model family; "
+            "cross-vendor judging would be a stronger check"
         )
     unreviewed = [i for i in items if not i.reviewed]
     if unreviewed:
@@ -256,7 +290,7 @@ async def run_eval(
 
     return RunSummary(
         n_items=len(items),
-        llm_mode=settings.llm_mode,
+        llm_mode=provider_name,
         provisional=bool(reasons),
         provisional_reasons=reasons,
         context_precision=aggregate(r.context_precision for r in answering),

@@ -30,6 +30,9 @@ PRICING: dict[str, tuple[float, float]] = {
     "claude-opus-5": (5.00, 25.00),
     "claude-sonnet-5": (2.00, 10.00),
     "claude-haiku-4-5": (1.00, 5.00),
+    "gemini-3.8-flash": (0.30, 2.50),
+    "gemini-3.5-flash": (0.30, 2.50),
+    "gemini-pro-latest": (1.25, 10.00),
     "claude-opus-4-8": (5.00, 25.00),
 }
 
@@ -121,6 +124,7 @@ class OfflineProvider:
     """
 
     name = "offline"
+    judge_model = "offline"
 
     async def stream_answer(
         self,
@@ -257,10 +261,21 @@ def _keywords(text: str) -> list[str]:
     return list(dict.fromkeys(_IDENTIFIER.findall(text)))[:8]
 
 
-def get_provider() -> LLMProvider:
-    """The one dispatch point. Flipping LLM_MODE is the only change needed."""
-    if settings.is_offline:
-        return OfflineProvider()
-    from app.generate.anthropic_provider import AnthropicProvider  # deferred: SDK stays optional
+def get_provider(name: str | None = None) -> LLMProvider:
+    """The one dispatch point for generation backends.
 
-    return AnthropicProvider()
+    SDK imports are deferred so neither vendor package is required to run in
+    offline mode, and so installing one does not force installing the other.
+    """
+    choice = name or settings.provider
+    if choice == "offline":
+        return OfflineProvider()
+    if choice == "anthropic":
+        from app.generate.anthropic_provider import AnthropicProvider
+
+        return AnthropicProvider()
+    if choice == "gemini":
+        from app.generate.gemini_provider import GeminiProvider
+
+        return GeminiProvider()
+    raise ValueError(f"unknown LLM provider: {choice!r}")

@@ -464,5 +464,10 @@ def route_after_assemble(state: PipelineState) -> str:
 def route_verify(state: PipelineState) -> str:
     if not state.get("want_verify", True) or state.get("refused"):
         return "skip_verify"
+    # The sampling gate exists to control cost on live traffic. During an eval
+    # it must not apply: sampling 20% would make faithfulness a measurement of a
+    # random subset rather than of the dataset, which is not the same number.
+    if state.get("force_verify"):
+        return "verify"
     uncited = find_uncited_spans([])
     return "verify" if should_verify(state.get("answer_text", ""), uncited) else "skip_verify"

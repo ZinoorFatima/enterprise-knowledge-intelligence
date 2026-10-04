@@ -120,6 +120,7 @@ async def run_pipeline(
     history: list | None = None,
     want_rewrite: bool = True,
     want_verify: bool = True,
+    force_verify: bool = False,
     top_k: int | None = None,
     graph=None,
 ) -> PipelineResult:
@@ -135,6 +136,7 @@ async def run_pipeline(
         "history": history or [],
         "want_rewrite": want_rewrite,
         "want_verify": want_verify,
+        "force_verify": force_verify,
         "stage_latency_ms": {},
         "errors": [],
     }
