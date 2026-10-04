@@ -125,7 +125,7 @@ Schema ownership is split by namespace so two migration tools share one database
 
 ### Test suite
 
-**171 tests passing**, including query-plan tests that run `EXPLAIN` against a live Postgres.
+**187 tests passing**, including query-plan tests that run `EXPLAIN` against a live Postgres.
 
 ```
 api/tests/test_chunker.py          chunking + exact char provenance
@@ -135,30 +135,48 @@ api/tests/test_pipeline_graph.py   LangGraph routing + refusal behaviour
 api/tests/test_verify.py           verifier fail-closed behaviour
 api/tests/test_eval_metrics.py     metric definitions + bounds
 api/tests/test_eval_runner.py      end-to-end harness
+api/tests/test_lexical_reranker.py scoring floor relationship (refusal)
 api/tests/test_hybrid_plan.py      index usage, asserted via EXPLAIN
 api/tests/test_ingest.py           real PDF → page spine → chunks → DB
 ```
 
-### Evaluation run (dev corpus, offline mode)
+### Evaluation run (dev corpus, offline mode, real stack)
+
+Run through `PgRetriever` + the configured reranker — the same components the API serves with.
 
 ```
-items: 8   provisional: true
-  context_precision           1.000
-  context_recall              1.000
+items: 8   provisional: true   reranker: lexical
+  context_precision           0.972   95% CI [0.917, 1.000]   n=6
+  context_recall              1.000   95% CI [1.000, 1.000]   n=6
   faithfulness         not measured
-  answer_relevancy            0.486
-  ndcg_at_10                  1.000
-  mrr                         1.000
-  recall_at_20                1.000
-  refusal accuracy            0.000  over 2 unanswerable items
+  answer_relevancy            0.474   95% CI [0.422, 0.519]   n=6
+  ndcg_at_10                  1.000   n=6
+  mrr                         1.000   n=6
+  recall_at_20                1.000   n=6
+  refusal accuracy            1.000   over 2 unanswerable items
+  p50 222 ms   p95 13.2 s (first call loads the embedding model)
+```
+
+Per item — the two unanswerable questions are correctly refused, and no answerable question is over-refused:
+
+```
+  q-001  CP=1.00  CR=1.00  answered
+  q-002  CP=1.00  CR=1.00  answered
+  q-003  CP=0.83  CR=1.00  answered
+  q-004  CP=1.00  CR=1.00  answered
+  q-005  CP=1.00  CR=1.00  answered
+  q-006  CP=1.00  CR=1.00  answered
+  q-007  CP=  --  CR=  --  REFUSED   (refusal expected)  OK
+  q-008  CP=  --  CR=  --  REFUSED   (refusal expected)  OK
 ```
 
 **What these actually mean:**
 
-- **The 1.000s are not a good sign.** With 5 coarse chunks and one labelled page per question, almost anything retrieved covers the target. The corpus is far too small to discriminate.
+- **The remaining 1.000s are not a good sign.** With a handful of coarse chunks and one labelled page per question, almost anything retrieved covers the target. The corpus is far too small to discriminate — Context Precision at 0.972 is the only metric showing real separation.
 - **`faithfulness: not measured`** is the system working correctly. Offline mode cannot judge entailment, so it reports nothing rather than inventing a score.
-- **`refusal accuracy: 0.000`** is a real, useful finding — the system answered both deliberately unanswerable questions. With the lexical reranker's 0.25 baseline, weak matches still clear the score floors. This needs tuning, and the metric exists precisely to catch it.
+- **`refusal accuracy: 1.000`** — both deliberately unanswerable questions are refused. This metric previously read `0.000` and caught a genuine bug (see below), which is exactly what it exists for.
 - **`provisional: true`** is attached automatically, with reasons, whenever a run uses unreviewed data or stubbed generation.
+- **`--` is not zero.** Context Precision is undefined on a correctly-refused item; reporting 0 there would punish the behaviour the score floors exist to produce.
 
 ### Honesty properties, enforced in code
 
@@ -181,6 +199,8 @@ Each has a regression test:
 1. **The HNSW index was silently unused.** `ROW_NUMBER() OVER (ORDER BY embedding <=> $3)` forces a sort over every filtered row before `LIMIT` applies. No error — just latency scaling with corpus size. Restructured: **16.2 ms → 4.96 ms** on 4k rows, reading 100 rows instead of 4000.
 2. **Chunk text drifted from its own offsets.** The chunker re-joined stripped sentences with `" "`, but real PDFs separate them with newlines and tabs — so every derived citation page was approximate. Chunks now slice the source directly, verified against a phrase printed on a known page.
 3. **nDCG exceeded 1.0** (reported `1.105`). Several chunks covering one labelled page were each credited, so DCG outran IDCG. Pages are now credited once.
+4. **Unanswerable questions were being answered** (refusal accuracy `0.000`). The lexical reranker scored `0.25 + 0.75 × overlap`, so a passage with *zero* query-term overlap scored exactly `0.25` — precisely `rerank_score_floor`, which is compared with `>=`. Every irrelevant passage survived, and the model received a full context for questions the corpus could not answer. Zero overlap now scores `0.0`, query stopwords no longer dilute the denominator, and a single incidental term match is discounted as non-evidence. Refusal accuracy went `0.000 → 1.000` with no over-refusal.
+5. **`run_eval.py` measured the wrong system.** The script wired fake in-memory retriever and reranker stand-ins, so it reported zeros against a golden set labelled with real document ids. It now uses `PgRetriever` and the configured components, like the API.
 
 ---
 

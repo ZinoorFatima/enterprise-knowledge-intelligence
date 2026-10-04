@@ -117,6 +117,19 @@ class BgeReranker:
         return [1.0 / (1.0 + math.exp(-float(s))) for s in scores]
 
 
+# Interrogatives and filler that appear in almost any question. Left in, they
+# inflate the denominator and let a single incidental content-word match look
+# like partial relevance.
+_QUERY_STOPWORDS = frozenset(
+    """
+    what when where which whose does did done have has had been were was will
+    would should could shall must many much more most some such that this these
+    those them they their there here into over under than then about also just
+    only very with from your ours able need needs required require any each
+    """.split()
+)
+
+
 class LexicalReranker:
     """Query-term overlap, computed in process. No model, no download.
 
@@ -125,8 +138,13 @@ class LexicalReranker:
     its place because it is sub-millisecond and never blocks: a reranker that
     makes a query hang for minutes is not a usable reranker.
 
-    Scores land in (0,1) so the absolute floor in config still means something,
-    and are scaled so a passage sharing most query terms clears it.
+    Scoring contract, and it matters more than the ranking: a passage with NO
+    lexical evidence must score BELOW settings.rerank_score_floor, not at it.
+    An earlier version returned `0.25 + 0.75 * overlap`, so zero overlap scored
+    exactly 0.25 -- precisely the configured floor, which is compared with >=.
+    Every irrelevant passage therefore survived, unanswerable questions arrived
+    at the model with a full context, and the system answered them instead of
+    refusing. Refusal accuracy caught it at 0.000.
     """
 
     name = "lexical"
@@ -134,17 +152,34 @@ class LexicalReranker:
 
     _WORD = re.compile(r"\w+")
 
+    def _terms(self, query: str) -> set[str]:
+        return {
+            w
+            for w in self._WORD.findall(query.lower())
+            if len(w) > 3 and w not in _QUERY_STOPWORDS
+        }
+
     async def rerank(self, query: str, passages: Sequence[str]) -> list[float]:
-        terms = {w for w in self._WORD.findall(query.lower()) if len(w) > 3}
+        terms = self._terms(query)
         if not terms:
-            # No discriminating terms: stay neutral rather than inventing an
-            # ordering, and let RRF's ranking stand.
+            # No discriminating terms to judge on. Stay neutral rather than
+            # inventing an ordering, and let RRF's ranking stand.
             return [0.5] * len(passages)
+
         out: list[float] = []
         for p in passages:
             words = set(self._WORD.findall(p.lower()))
-            overlap = len(terms & words) / len(terms)
-            out.append(round(min(0.25 + 0.75 * overlap, 1.0), 6))
+            matched = len(terms & words)
+            if matched == 0:
+                out.append(0.0)
+                continue
+            coverage = matched / len(terms)
+            # A single incidental term match is not evidence -- "address"
+            # appears in a termination clause without making it an answer about
+            # someone's home address. Halve single-match passages so they fall
+            # below the floor unless the query is itself a single term.
+            confidence = min(1.0, matched / 2.0)
+            out.append(round(min(coverage * confidence, 1.0), 6))
         return out
 
 
