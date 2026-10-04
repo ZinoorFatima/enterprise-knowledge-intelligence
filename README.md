@@ -10,7 +10,7 @@ Most RAG systems are a black box — a question goes in, a confident paragraph c
 
 Upload PDFs. Ask questions across the whole corpus. Get an answer where:
 
-- **Every citation resolves to an exact page and character span**, not a document-level pointer.
+- **Every citation resolves to an exact page and character span**, not a document-level pointer — click one and the source page opens with that span highlighted.
 - **Every factual claim is checked** against the retrieved evidence by a *different* model than the one that wrote it.
 - **A question the corpus cannot answer produces a refusal**, not a plausible fabrication.
 - **Every number the system reports is either measured or labelled as not measured.**
@@ -24,6 +24,7 @@ Upload PDFs. Ask questions across the whole corpus. Get an answer where:
 | **Retrieval** | Hybrid BM25-style + dense vector in one SQL statement, fused with Reciprocal Rank Fusion |
 | **Ranking** | Cross-encoder or lexical reranking, with absolute and relative score floors |
 | **Generation** | Grounded synthesis with inline citations resolved by index arithmetic |
+| **Source viewer** | Click a citation to open its page with the cited span highlighted, via three-tier targeting that degrades honestly |
 | **Validation** | Per-claim entailment verification, independent verifier model enforced in code |
 | **Evaluation** | Context Precision / Recall, Faithfulness, Answer Relevancy, nDCG, MRR, refusal accuracy, bootstrap CIs |
 
@@ -191,6 +192,7 @@ These are not conventions — they fail the build or raise at runtime:
 | Fabricated citations are rejected | Verdicts citing chunk ids never sent are dropped |
 | Unreviewed data cannot look measured | Runs stamped `provisional` with reasons attached |
 | Refusal is scored, not hidden | Unanswerable items scored separately as refusal accuracy |
+| A highlight is never confidently wrong | Span targeting is three-tier — exact text-layer match, fuzzy fallback, then page-level — and the UI labels which tier it used rather than implying precision it did not achieve |
 
 ### Bugs found and fixed during development
 
